@@ -15,8 +15,9 @@ const ProblemList: React.FC = () => {
 
   useEffect(() => {
     const fetchProblems = async () => {
+      setLoading(true);
       try {
-        const response = await axios.get('http://localhost:5001/api/problems');
+        const response = await axios.get('http://localhost:5002/api/problems');
         setProblems(response.data);
         setLoading(false);
       } catch (err) {

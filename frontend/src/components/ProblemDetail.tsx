@@ -33,6 +33,13 @@ interface TestResult {
   passed: boolean;
 }
 
+interface DebugSession {
+  sessionId: string;
+  status: 'initialized' | 'active' | 'completed' | 'error' | 'terminated';
+  output: string;
+  error?: string;
+}
+
 const ProblemDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -43,11 +50,19 @@ const ProblemDetail: React.FC = () => {
   const [executing, setExecuting] = useState<boolean>(false);
   const [results, setResults] = useState<TestResult[] | null>(null);
   const [allPassed, setAllPassed] = useState<boolean | null>(null);
+  
+  // Debugging state
+  const [isDebugging, setIsDebugging] = useState<boolean>(false);
+  const [debugSession, setDebugSession] = useState<DebugSession | null>(null);
+  const [debugOutput, setDebugOutput] = useState<string>('');
+  const [debugCommand, setDebugCommand] = useState<string>('');
+  const [debugLoading, setDebugLoading] = useState<boolean>(false);
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchProblem = async () => {
       try {
-        const response = await axios.get(`http://localhost:5001/api/problems/${id}`);
+        const response = await axios.get(`http://localhost:5002/api/problems/${id}`);
         setProblem(response.data);
         setCode(response.data.starterCodePython);
         setLoading(false);
@@ -84,8 +99,8 @@ const ProblemDetail: React.FC = () => {
     
     try {
       const endpoint = language === 'python' 
-        ? 'http://localhost:5001/api/execute/python' 
-        : 'http://localhost:5001/api/execute/cpp';
+        ? 'http://localhost:5002/api/execute/python' 
+        : 'http://localhost:5002/api/execute/cpp';
         
       const response = await axios.post(endpoint, {
         code,
@@ -98,6 +113,117 @@ const ProblemDetail: React.FC = () => {
       setError('Failed to execute code. Please try again later.');
     } finally {
       setExecuting(false);
+    }
+  };
+  
+  // Initialize debugging session
+  const handleStartDebug = async () => {
+    if (!problem) return;
+    if (language !== 'python') {
+      setDebugError('Debugging is currently only supported for Python.');
+      return;
+    }
+    
+    setDebugLoading(true);
+    setDebugError(null);
+    setDebugOutput('');
+    
+    try {
+      // Initialize debug session
+      const initResponse = await axios.post('http://localhost:5002/api/debug/python/init', {
+        code,
+        problemId: problem.id
+      });
+      
+      if (!initResponse.data.success) {
+        throw new Error(initResponse.data.error || 'Failed to initialize debugging session');
+      }
+      
+      const sessionId = initResponse.data.sessionId;
+      
+      // Start the debug session
+      const startResponse = await axios.post('http://localhost:5002/api/debug/python/start', {
+        sessionId
+      });
+      
+      if (!startResponse.data.success) {
+        throw new Error(startResponse.data.error || 'Failed to start debugging session');
+      }
+      
+      setDebugSession({
+        sessionId,
+        status: startResponse.data.status,
+        output: startResponse.data.output || 'Debug session started.',
+        error: startResponse.data.error
+      });
+      
+      setDebugOutput(startResponse.data.output || 'Debug session started.');
+      setIsDebugging(true);
+      
+    } catch (err: any) {
+      setDebugError(err.message || 'Failed to start debugging session');
+    } finally {
+      setDebugLoading(false);
+    }
+  };
+  
+  // Send a debugger command
+  const handleDebugCommand = async () => {
+    if (!debugSession || !debugCommand.trim()) return;
+    
+    setDebugLoading(true);
+    
+    try {
+      const response = await axios.post('http://localhost:5002/api/debug/python/command', {
+        sessionId: debugSession.sessionId,
+        command: debugCommand
+      });
+      
+      if (response.data.output) {
+        setDebugOutput(prev => prev + '\n> ' + debugCommand + '\n' + response.data.output);
+      }
+      
+      if (response.data.error) {
+        setDebugOutput(prev => prev + '\nError: ' + response.data.error);
+      }
+      
+      // Clear command after sending
+      setDebugCommand('');
+      
+      // Update session status
+      const statusResponse = await axios.get(`http://localhost:5002/api/debug/python/${debugSession.sessionId}`);
+      
+      setDebugSession({
+        ...debugSession,
+        status: statusResponse.data.status,
+      });
+      
+      // If session is completed or terminated, end debugging mode
+      if (['completed', 'terminated', 'error'].includes(statusResponse.data.status)) {
+        setIsDebugging(false);
+      }
+      
+    } catch (err: any) {
+      setDebugError(err.message || 'Failed to send debug command');
+    } finally {
+      setDebugLoading(false);
+    }
+  };
+  
+  // Terminate debug session
+  const handleStopDebug = async () => {
+    if (!debugSession) return;
+    
+    try {
+      await axios.post('http://localhost:5002/api/debug/python/terminate', {
+        sessionId: debugSession.sessionId
+      });
+      
+      setIsDebugging(false);
+      setDebugSession(null);
+      setDebugOutput(prev => prev + '\nDebugging session terminated.');
+    } catch (err: any) {
+      setDebugError(err.message || 'Failed to terminate debugging session');
     }
   };
 
@@ -156,6 +282,59 @@ const ProblemDetail: React.FC = () => {
               </div>
             ))}
           </div>
+          
+          {isDebugging && (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-2">Debug Console</h3>
+              <div className="bg-black text-white p-3 rounded-md font-mono text-sm h-64 overflow-y-auto whitespace-pre-wrap">
+                {debugOutput}
+              </div>
+              <div className="flex mt-2">
+                <input
+                  type="text"
+                  value={debugCommand}
+                  onChange={(e) => setDebugCommand(e.target.value)}
+                  placeholder="Enter debug command (e.g., n, s, p variable)"
+                  className="flex-grow border rounded-l px-3 py-2 font-mono"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleDebugCommand();
+                    }
+                  }}
+                  disabled={debugLoading || !isDebugging}
+                />
+                <button
+                  onClick={handleDebugCommand}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-r"
+                  disabled={debugLoading || !debugCommand.trim() || !isDebugging}
+                >
+                  Send
+                </button>
+              </div>
+              <div className="flex justify-between mt-3">
+                <div>
+                  <span className="text-xs font-semibold">Common commands:</span>
+                  <div className="text-xs text-gray-500 mt-1">
+                    <code className="bg-gray-100 p-1 rounded">n</code> - next line, 
+                    <code className="bg-gray-100 p-1 rounded ml-1">s</code> - step into, 
+                    <code className="bg-gray-100 p-1 rounded ml-1">c</code> - continue, 
+                    <code className="bg-gray-100 p-1 rounded ml-1">p var</code> - print variable
+                  </div>
+                </div>
+                <button
+                  onClick={handleStopDebug}
+                  className="bg-red-600 text-white px-3 py-1 rounded text-sm"
+                >
+                  Stop Debugging
+                </button>
+              </div>
+              {debugError && (
+                <div className="bg-red-100 text-red-700 p-2 rounded mt-2 text-sm">
+                  {debugError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Code editor */}
@@ -168,18 +347,36 @@ const ProblemDetail: React.FC = () => {
                 value={language}
                 onChange={handleLanguageChange}
                 className="border rounded px-2 py-1"
+                disabled={isDebugging}
               >
                 <option value="python">Python</option>
                 <option value="cpp">C++</option>
               </select>
             </div>
-            <button
-              onClick={handleSubmit}
-              disabled={executing}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded disabled:opacity-50"
-            >
-              {executing ? 'Running...' : 'Submit'}
-            </button>
+            <div>
+              {!isDebugging ? (
+                <>
+                  <button
+                    onClick={handleStartDebug}
+                    disabled={language !== 'python' || executing || debugLoading}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded mr-2 disabled:opacity-50"
+                  >
+                    Debug
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={executing || debugLoading || isDebugging}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded disabled:opacity-50"
+                  >
+                    {executing ? 'Running...' : 'Submit'}
+                  </button>
+                </>
+              ) : (
+                <div className="text-sm text-indigo-600 font-semibold">
+                  Debugging Mode Active
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="border rounded-md h-96">
@@ -194,12 +391,26 @@ const ProblemDetail: React.FC = () => {
                 scrollBeyondLastLine: false,
                 fontSize: 14,
                 tabSize: 2,
+                readOnly: isDebugging, // Make read-only during debugging
               }}
             />
           </div>
           
+          {/* Debug Help */}
+          {language === 'python' && !isDebugging && (
+            <div className="mt-4 bg-blue-50 p-3 rounded-md text-sm">
+              <p className="font-semibold text-blue-800">Python Debugging Tips:</p>
+              <ul className="text-blue-700 mt-1 list-disc list-inside">
+                <li>Use the <strong>Debug</strong> button to start debugging your solution</li>
+                <li>The debugger uses Python's built-in pdb</li>
+                <li>Your code will run with the first test case</li>
+                <li>Common commands: <code className="bg-blue-100 rounded px-1">n</code> (next line), <code className="bg-blue-100 rounded px-1">s</code> (step into), <code className="bg-blue-100 rounded px-1">p variable</code> (print a variable's value)</li>
+              </ul>
+            </div>
+          )}
+          
           {/* Test results */}
-          {results && (
+          {results && !isDebugging && (
             <div className="mt-6">
               <h3 className="text-lg font-semibold mb-2">
                 Test Results: 

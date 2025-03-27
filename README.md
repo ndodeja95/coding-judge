@@ -1,96 +1,106 @@
-# Coding Judge
+# Coding Judge Platform
 
-A simple LeetCode-like web application that provides an interface to write code in Python/C++ and compile it with given test cases to judge the correctness of the code.
+A web-based coding judge platform for solving algorithmic problems with debugging support.
 
 ## Features
 
-- View a list of coding problems
-- Select a problem to solve
-- Write code in Python or C++
-- Submit your code for evaluation against test cases
-- View test results showing which test cases passed or failed
+- Interactive code editor with syntax highlighting
+- Support for multiple programming languages (Python and C++)
+- Automatic test case execution
+- Debugging support for Python
+- Problem description and examples
+- Test results display
 
-## Tech Stack
+## Debugging Support
 
-- **Frontend:** React, TypeScript, Tailwind CSS, Monaco Editor
-- **Backend:** Node.js, Express
-- **Code Execution:** Python and C++ compilers/interpreters
+The platform now includes an interactive debugging feature for Python code that allows users to:
 
-## Prerequisites
+1. Step through their code line by line
+2. Inspect variables at each step
+3. Set breakpoints and watch expressions
+4. Practice debugging skills with intentionally buggy problems
 
-- Node.js (v14+)
-- npm (v6+)
-- Python (3.x)
-- C++ compiler (g++)
+### How to Use the Debugger
 
-## Installation
+1. Select a problem and write your Python solution
+2. Click the "Debug" button to start a debugging session
+3. Use the following commands in the debug console:
+   - `n` - Execute the next line (step over)
+   - `s` - Step into a function call
+   - `c` - Continue execution until the next breakpoint
+   - `q` - Quit the debugger
+   - `p variable_name` - Print the value of a variable
+   - `l` - List the current source code context
+   - `b line_number` - Set a breakpoint at a specific line
+
+### Intentionally Buggy Problems
+
+The platform includes problems with intentional bugs for users to practice debugging:
+
+- **Buggy Fibonacci**: A recursive Fibonacci implementation with incorrect logic
+- **Buggy Binary Search**: A binary search implementation with multiple bugs to fix
+
+These problems are designed to help users improve their debugging skills by identifying and fixing common issues.
+
+## Setup
+
+### Prerequisites
+
+- Node.js and npm
+- Modern web browser
+
+### Installation
 
 1. Clone the repository
+2. Install dependencies for the backend:
    ```
-   git clone <repository-url>
-   cd coding-judge
-   ```
-
-2. Install the dependencies
-   ```
+   cd backend
    npm install
+   ```
+3. Install dependencies for the frontend:
+   ```
    cd frontend
    npm install
-   cd ..
    ```
 
-## Running the Application
+### Running the Application
 
-To run both the frontend and backend concurrently:
+1. Start the backend server:
+   ```
+   cd backend
+   node server.js
+   ```
+2. Start the frontend development server:
+   ```
+   cd frontend
+   npm start
+   ```
+3. Open your browser and navigate to `http://localhost:3000`
 
-```
-npm start
-```
+## Architecture
 
-This will start:
-- The backend server on http://localhost:5000
-- The React frontend on http://localhost:3000
+The application consists of:
 
-## Project Structure
-
-```
-coding-judge/
-├── frontend/                    # React frontend
-│   ├── public/
-│   └── src/
-│       ├── components/          # React components
-│       │   ├── ProblemList.tsx  # Displays list of problems
-│       │   └── ProblemDetail.tsx # Problem details and code editor
-│       └── App.tsx              # Main App component
-├── backend/                     # Express backend
-│   ├── server.js                # Express server setup
-│   └── temp/                    # Temporary directory for code files
-└── package.json                 # Project configuration
-```
+- **Frontend**: React application with Monaco Editor for code editing
+- **Backend**: Node.js with Express for code execution and testing
 
 ## Adding New Problems
 
-To add new problems, modify the `problems` array in the `backend/server.js` file. Each problem should have:
+To add new problems, modify the `problems` array in `backend/server.js`. Each problem should include:
 
-- `id`: Unique identifier
-- `title`: Problem title
-- `difficulty`: "Easy", "Medium", or "Hard"
-- `description`: Problem description
-- `examples`: Array of examples with input, output, and explanation
-- `testCases`: Array of test cases with input and expectedOutput
-- `starterCodePython`: Python starter code for the problem
-- `starterCodeCpp`: C++ starter code for the problem
+- Title and difficulty
+- Description and examples
+- Test cases with inputs and expected outputs
+- Starter code for supported languages
 
-## Limitations
+## Debugging Implementation Details
 
-- The backend relies on local system compilers and executables, which may pose security risks in a production environment
-- The C++ implementation is simplified and doesn't provide robust input handling for complex data structures
-- No user authentication or code saving functionality
+The debugging implementation works by:
 
-## Future Enhancements
+1. Creating a session-specific Python file with the user's code
+2. Running the code with Python's built-in `pdb` debugger
+3. Establishing a communication channel between the debugger and the UI
+4. Translating user commands into debugger actions
+5. Displaying the debugging output in real-time
 
-- Add user authentication
-- Save submissions history
-- Support more programming languages
-- Add timed contests
-- Improve code execution security with containerization 
+This provides a real debugging experience within the browser, similar to using a local development environment 
